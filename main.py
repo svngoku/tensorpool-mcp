@@ -173,17 +173,25 @@ def cluster_info(
 
 @mcp.tool(
     title="Destroy cluster",
-    description="Destroy a TensorPool cluster by id (requires confirm=true).",
+    description="Destroy a TensorPool cluster by id. Set wait=true to block until the cluster is fully deleted.",
 )
 def cluster_destroy(
     cluster_id: str = Field(description="Cluster id"),
     confirm: bool = Field(
         default=False, description="Must be true to actually destroy the cluster"
     ),
+    wait: bool = Field(
+        default=False,
+        description="Wait until the cluster is fully destroyed before returning",
+    ),
 ) -> str:
     if not confirm:
         return "Refusing to destroy cluster: set confirm=true to proceed."
-    return _run_tp(["cluster", "destroy", cluster_id])
+    args = ["cluster", "destroy", "--no-input"]
+    if wait:
+        args.append("--wait")
+    args.append(cluster_id)
+    return _run_tp(args)
 
 
 # --------------------
