@@ -1,103 +1,147 @@
-# mcp-server-template-python
+# TensorPool MCP Server (Python)
 
-A very simple Python template for building MCP servers using Streamable HTTP transport.
+Production-friendly MCP server that wraps the TensorPool `tp` CLI via subprocess and exposes cluster and job operations as MCP tools.
 
-## Overview
-This template provides a foundation for creating MCP servers that can communicate with AI assistants and other MCP clients. It includes a simple HTTP server implementation with example tools, resources & prompts to help you get started building your own MCP integrations.
+- Transport: Streamable HTTP (recommended for remote/production)
+- Dependency manager: `uv`
+- Safe SSH key handling: validate public keys, write to a temp file, pass `-i` to `tp cluster create`
+- Clear error reporting: return `stdout` on success; on error include exit code + `stdout`/`stderr`
 
-## Prerequisites
-- Install uv (https://docs.astral.sh/uv/getting-started/installation/)
+## Quick start
 
-## Installation
+Prerequisites
+- Install `uv`: https://docs.astral.sh/uv/getting-started/installation/
+- A TensorPool API key with access to clusters/jobs
 
-1. Clone the repository:
-
-```bash
-git clone git@github.com:alpic-ai/mcp-server-template-python.git
-cd mcp-server-template-python
-```
-
-2. Install python version & dependencies:
+Install and run locally (port 3000 by default):
 
 ```bash
 uv python install
 uv sync --locked
-```
 
-## Usage
+# Option A: .env (local only)
+# Create .env with your key — DO NOT COMMIT THIS FILE
+# TENSORPOOL_API_KEY=...  (or TENSORPOOL_KEY=...)
 
-Start the server on port 3000:
+# Option B: export at runtime
+TENSORPOOL_API_KEY=... uv run main.py
 
-```bash
+# Start (uses streamable-http). URL: http://127.0.0.1:3000/mcp
 uv run main.py
 ```
 
-## Running the Inspector
+Notes
+- The server auto-loads `.env` for local runs but will not override existing env vars.
+- The CLI expects `TENSORPOOL_KEY`. This server bridges `TENSORPOOL_API_KEY → TENSORPOOL_KEY` automatically.
+- Verify CLI: `uv run tp --version` should print a version (e.g., `0.0.6`).
 
-### Requirements
-- Node.js: ^22.7.5
+## MCP Inspector
 
-### Quick Start (UI mode)
-To get up and running right away with the UI, just execute the following:
+UI quick start:
 ```bash
 npx @modelcontextprotocol/inspector
 ```
 
-The inspector server will start up and the UI will be accessible at http://localhost:6274.
+Connect with:
+- Transport: Streamable HTTP
+- URL: `http://127.0.0.1:3000/mcp`
+- Increase per-request timeout to 120–300s for long operations (cluster create/destroy, job push).
 
-You can test your server locally by selecting:
-- Transport Type: Streamable HTTP
-- URL: http://127.0.0.1:3000/mcp
+## Exposed tools
 
-## Development
+Clusters
+- `cluster_create(ssh_public_key, instance_type, num_nodes=1, name=None)`
+  - Creates a cluster. Provide an OpenSSH public key line (e.g. `ssh-ed25519 AAAA... user@host`).
+- `cluster_list(org=False)`
+  - Lists clusters for your account/org.
+- `cluster_info(cluster_id)`
+  - Shows details for a specific cluster.
+- `cluster_destroy(cluster_id, confirm=False, wait=False)`
+  - Destroys a cluster. Requires `confirm=true`. Use `wait=true` to block until fully deleted; otherwise returns quickly and you can poll with `cluster_info`.
 
-### Adding New Tools
+Jobs
+- `job_write_config(workdir, instance_type, commands, outputs=[], ignore=[], filename="tp.config.toml")`
+  - Writes a minimal `tp.config.toml` next to your project. Example:
+    ```toml
+    instance_type = "1xH100"
+    commands = [
+      "pip install -r requirements.txt",
+      "python train.py",
+    ]
+    outputs = ["checkpoints/"]
+    ignore = [".venv"]
+    ```
+- `job_push(config_path, workdir=None)`
+  - Submits a job defined by `tp.config.toml`.
+- `job_list(org=False)`
+  - Lists jobs.
+- `job_info(job_id)`
+  - Shows job details.
+- `job_pull(job_id, force=False)`
+  - Downloads job outputs. Use `force=true` to overwrite.
+- `job_cancel(job_id, confirm=False)`
+  - Cancels a running job. Requires `confirm=true`.
 
-To add a new tool, modify `main.py`:
+### Example Inspector payloads
 
-```python
-@mcp.tool(
-    title="Your Tool Name",
-    description="Tool Description for the LLM",
-)
-async def new_tool(
-    tool_param1: str = Field(description="The description of the param1 for the LLM"), 
-    tool_param2: float = Field(description="The description of the param2 for the LLM") 
-)-> str:
-    """The new tool underlying method"""
-    result = await some_api_call(tool_param1, tool_param2)
-    return result
-```
+- Destroy without blocking:
+  ```json
+  {
+    "method": "tools/call",
+    "params": {
+      "name": "cluster_destroy",
+      "arguments": {"cluster_id": "c-123", "confirm": true, "wait": false}
+    }
+  }
+  ```
 
-### Adding New Resources
+- Create a config and push a job:
+  ```json
+  {"method":"tools/call","params":{"name":"job_write_config","arguments":{
+    "workdir":".",
+    "instance_type":"1xH100",
+    "commands":["pip install -r requirements.txt","python train.py"],
+    "outputs":["checkpoints/"],
+    "ignore":[".venv"],
+    "filename":"tp.config.toml"
+  }}}
 
-To add a new resource, modify `main.py`:
+  {"method":"tools/call","params":{"name":"job_push","arguments":{
+    "config_path":"tp.config.toml"
+  }}}
+  ```
 
-```python
-@mcp.resource(
-    uri="your-scheme://{param1}/{param2}",
-    description="Description of what this resource provides",
-    name="Your Resource Name",
-)
-def your_resource(param1: str, param2: str) -> str:
-    """The resource template implementation"""
-    # Your resource logic here
-    return f"Resource content for {param1} and {param2}"
-```
+## Environment variables
 
-The URI template uses `{param_name}` syntax to define parameters that will be extracted from the resource URI and passed to your function.
+- `TENSORPOOL_KEY` (preferred by the CLI) or `TENSORPOOL_API_KEY` (bridged)
+- For local only, `.env` is auto-loaded (non-overriding). In production, set env vars in your platform (Render, Fly.io, etc.).
+- Do not commit `.env`. It is ignored by `.gitignore`.
 
-### Adding New Prompts
+## Timeouts and interactivity
 
-To add a new prompt , modify `main.py`:
+- Long operations can exceed default client timeouts. In MCP Inspector, set the per-request timeout to at least 120s (300s recommended for destructive ops).
+- The server passes `--no-input` to `tp cluster destroy` to avoid interactive prompts. For other commands, ensure your API key is set so `tp` does not prompt.
 
-```python
-@mcp.prompt("")
-async def your_prompt(
-    prompt_param: str = Field(description="The description of the param for the user")
-) -> str:
-    """Generate a helpful prompt"""
+## Troubleshooting
 
-    return f"You are a friendly assistant, help the user and don't forget to {prompt_param}."
+- `ERROR: TENSORPOOL_API_KEY (or TENSORPOOL_KEY) is not set in the environment.`
+  - Export `TENSORPOOL_API_KEY` or `TENSORPOOL_KEY`, or create a local `.env`.
+- `ERROR: 'tp' CLI not found.`
+  - Ensure `tensorpool` is installed (included via `uv add tensorpool`). Verify with `uv run tp --version`.
+- `MCP error -32001: Request timed out`
+  - Increase client timeout; avoid long blocking operations; for `cluster_destroy` prefer `wait=false` and poll with `cluster_info`.
+- Directly importing and calling tools in Python
+  - When bypassing MCP (e.g., `from main import job_write_config`), pass all arguments explicitly—defaults defined with `Field(...)` are metadata, not runtime defaults.
 
-```
+## Deployment
+
+- Server binds to `$PORT` (default 3000) and serves Streamable HTTP at `/mcp`.
+- Render example is included (`render.yaml`, `Procfile`). Be sure to set `TENSORPOOL_KEY` (or `TENSORPOOL_API_KEY`) in the service’s environment.
+
+## Recommendations (optional enhancements)
+
+These are non-breaking ideas you can adopt as needed:
+- Add a simple `account_me` tool (`tp me`) to validate credentials quickly.
+- Return JSON when available (e.g., add `-o json` if/when the CLI supports it) and fall back to text on errors.
+- Add streaming log support for long-running jobs (e.g., `tp job listen`) when client UX requires it.
+- Add auth to the MCP endpoint (e.g., bearer token header) before exposing publicly.
