@@ -16,10 +16,15 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 from pydantic import Field
 
-mcp = FastMCP("TensorPool MCP", port=3000, stateless_http=True, debug=True)
+
+# Load .env if present (local/dev). Does not override existing env vars.
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
+
+mcp = FastMCP("TensorPool MCP", stateless_http=True)
 
 
 def _run_tp(args: list[str], cwd: Optional[str] = None, timeout_s: int = 600) -> str:
