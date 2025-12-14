@@ -1,0 +1,14 @@
+# Python/uv
+.venv/
+__pycache__/
+*.pyc
+
+# Local env and secrets
+.env
+.env.*
+
+# OS
+.DS_Store
+
+# MCP inspector artifacts
+.inspector/
