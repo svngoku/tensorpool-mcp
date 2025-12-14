@@ -3,6 +3,10 @@
 __pycache__/
 *.pyc
 
+# Cursor folder
+.specstory/
+
+
 # Local env and secrets
 .env
 .env.*
@@ -12,3 +16,4 @@ __pycache__/
 
 # MCP inspector artifacts
 .inspector/
+
