@@ -24,16 +24,20 @@ from pydantic import Field
 # Load .env if present (local/dev). Does not override existing env vars.
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env", override=False)
 
-mcp = FastMCP("TensorPool MCP", stateless_http=True)
+mcp = FastMCP("TensorPool MCP", stateless_http=True, port=3000, debug=True)
 
 
 def _run_tp(args: list[str], cwd: Optional[str] = None, timeout_s: int = 600) -> str:
     """Run the `tp` CLI with the provided arguments and return a text result."""
     env = os.environ.copy()
 
-    # TensorPool CLI expects the API key in env
-    if not env.get("TENSORPOOL_API_KEY"):
-        return "ERROR: TENSORPOOL_API_KEY is not set in the environment."
+    # Ensure the CLI sees an API key; accept either var and bridge if needed
+    tp_api_key = env.get("TENSORPOOL_API_KEY") or env.get("TENSORPOOL_KEY")
+    if not tp_api_key:
+        return "ERROR: TENSORPOOL_API_KEY (or TENSORPOOL_KEY) is not set in the environment."
+    # Bridge to the name expected by tp if only TENSORPOOL_API_KEY is set
+    if not env.get("TENSORPOOL_KEY") and env.get("TENSORPOOL_API_KEY"):
+        env["TENSORPOOL_KEY"] = env["TENSORPOOL_API_KEY"]
 
     cmd = ["tp", *args]
     try:
