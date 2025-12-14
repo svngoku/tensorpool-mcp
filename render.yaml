@@ -1,0 +1,24 @@
+previews:
+  generation: automatic
+
+services:
+  - type: web
+    runtime: python
+    name: mcp-server-app
+    repo: https://github.com/svngoku/mcp-server-template
+    branch: main
+    region: frankfurt
+    plan: standard
+    numInstances: 2
+    buildCommand: uv python install && uv sync --locked
+    startCommand: uv run main.py
+    autoDeployTrigger: 'off'
+    maxShutdownDelaySeconds: 60
+
+  - type: worker
+    runtime: python
+    name: mcp-worker
+    repo: https://github.com/svngoku/mcp-server-template
+    branch: main
+    buildCommand: uv python install && uv sync --locked
+    startCommand: uv run main.py # Ou autre worker spécifique
