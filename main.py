@@ -272,4 +272,6 @@ def job_cancel(
 
 if __name__ == "__main__":
     # Streamable HTTP plays well with long-running operations/logs
-    mcp.run(transport="streamable-http")
+    # Bind to $PORT for platform compatibility (e.g., Render/Heroku), default 3000
+    port = int(os.environ.get("PORT", "3000"))
+    mcp.run(transport="streamable-http", port=port, host="0.0.0.0")
